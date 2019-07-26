@@ -16,7 +16,7 @@ VERSION = "2019.7.22.20.03"
 
 def log(msg):
     now = datetime.now()        
-    print("[{}] {}".format(now.strftime("%w, %-H:%-M"), msg))
+    print("[{}] {}".format(now.strftime("%a, %H:%M"), msg))
 
 class Controller:
     # Here will be the instance stored.
@@ -93,46 +93,54 @@ class Controller:
             log("\nv:{} running through {} zones".format(VERSION, len(self.zones)))
             for zone in self.zones:
                 #log("zone: {}".format(zone.name))
-                
-                for sched in zone.getActiveSchedule():
+                sched = zone.getNextSchedule()
+                if sched: # zone.getActiveSchedule():
+                    delta = sched.getNextRunDatetime() - datetime.now()
+                    _hours = delta.total_seconds()/3600
+                    hours = "{}".format(int(_hours))
+                    _mins = delta.total_seconds()%3600/60
+                    min = "{}".format(int(_mins))
+                    sec = "{}".format(int(delta.total_seconds()%3600%60))
+                    log("next run in {}:{}:{} ".format(hours, min, sec))
+
+                    # sleep until next run. 
+                    time.sleep(delta.total_seconds() - 5)
                     log("{} found active {}".format(zone.name, sched.toStr()))
                     # run the zone 
                     runforSeconds = sched.runSeconds
-                    self.startChannel(zone.channel, runforSeconds)
-            time.sleep(15)
+                    self.startChannel(zone, runforSeconds)
 
-
-    def startChannel(self, ch=0, seconds=500):
-        a = [0xfe , 0xfd , 0xfb, 0xf7, 0xef, 0xdf, 0xbf, 0x7f]
-        channel = ch
-        gpio = (Controller.GPIOB, Controller.GPIOA) [ch < 8]
-        ch  -= (8, 0) [ch < 8]
+    def startChannel(self, zone, seconds=500):
+        reg_value = [0xfe , 0xfd , 0xfb, 0xf7, 0xef, 0xdf, 0xbf, 0x7f]
+        channel = zone.relay_channel
+        gpio = (Controller.GPIOB, Controller.GPIOA) [zone.relay_channel < 8]
+        channel  -= (8, 0) [zone.relay_channel < 8]
         
-        log("\trunning channel:{} for {} seconds".format(ch, seconds))
+        log("\trunning zone:{} for {} seconds".format(zone.zoneId, seconds))
         
         if platform.startswith('linux'):
             startTime = datetime.now()
             
-            self.__bus.write_byte_data(Controller.DEVICE, gpio, a[ch])
+            self.__bus.write_byte_data(Controller.DEVICE, gpio, reg_value[channel])
             time.sleep(seconds)
             self.__bus.write_byte_data(Controller.DEVICE, gpio, 0xff)
             endTime = datetime.now()
             self.addWaterLog(startTime.strftime("%H:%M:%S"),
                              endTime.strftime("%H:%M:%S"),
-                             channel,
+                             zone.zoneId,
                              (endTime-startTime).total_seconds())
         else:           
             time.sleep(seconds)
 
             
-    def addWaterLog(self, startTime, endTime, channel, seconds):
-        query = "insert into waterlog (startTime, channel, endTime, secondsOn) values(?, ?, ?, ?)"     
+    def addWaterLog(self, startTime, endTime, zoneId, seconds):
+        query = "insert into waterlog (start_ts, zone_id, end_ts, run_seconds) values(?, ?, ?, ?)"     
 
         conn = sqlite3.connect('sprinkler.db')
 
         with conn:
             curs = conn.cursor()
-            curs.execute(query, (startTime, channel, endTime, seconds))
+            curs.execute(query, (startTime, zoneId, endTime, seconds))
 
 
     '''
