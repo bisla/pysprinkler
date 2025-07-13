@@ -140,10 +140,12 @@ class Schedule:
         baseline = now - delta
         
         # to base line add the schedule time. 
+        run_time = baseline + timedelta(days=int(self.dayOfWeek), hours=int(self.startHour), minutes=int(self.startMinute))
         # print("baseline:{}".format(ddd.strftime("%a %d-%b-%Y-%H:%M")))
-        return baseline + timedelta(days=int(self.dayOfWeek), hours=int(self.startHour), minutes=int(self.startMinute))
+        if run_time < now:
+            run_time += timedelta(days=7)
 
-        # return datetime.strptime("{} {}:{}".format(self.dayOfWeek, self.startHour, self.startMinute), '%d-%b-%Y %w %H:%M') 
+        return run_time
 
     def isCurrent(self):
         cTimeStr = "{} {}:{}"
