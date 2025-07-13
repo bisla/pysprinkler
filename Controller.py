@@ -89,26 +89,47 @@ class Controller:
     def run(self):
         log("# in run")
 
-        while True: 
+        while True:
             log("\nv:{} running through {} zones".format(VERSION, len(self.zones)))
-            for zone in self.zones:
-                #log("zone: {}".format(zone.name))
-                sched = zone.getNextSchedule()
-                if sched: # zone.getActiveSchedule():
-                    delta = sched.getNextRunDatetime() - datetime.now()
-                    _hours = delta.total_seconds()/3600
-                    hours = "{}".format(int(_hours))
-                    _mins = delta.total_seconds()%3600/60
-                    min = "{}".format(int(_mins))
-                    sec = "{}".format(int(delta.total_seconds()%3600%60))
-                    log("next run in {}:{}:{} ".format(hours, min, sec))
 
-                    # sleep until next run. 
-                    time.sleep(delta.total_seconds() - 5)
-                    log("{} found active {}".format(zone.name, sched.toStr()))
-                    # run the zone 
-                    runforSeconds = sched.runSeconds
-                    self.startChannel(zone, runforSeconds)
+            next_schedules = []
+            for zone in self.zones:
+                sched = zone.getNextSchedule()
+                if sched:
+                    next_schedules.append(sched)
+
+            if not next_schedules:
+                log("No upcoming schedules found. Sleeping for 1 hour.")
+                time.sleep(3600)
+                continue
+
+            next_schedules.sort()
+            next_run = next_schedules[0]
+
+            delta = next_run.getNextRunDatetime() - datetime.now()
+
+            _hours = delta.total_seconds()/3600
+            hours = "{}".format(int(_hours))
+            _mins = delta.total_seconds()%3600/60
+            min = "{}".format(int(_mins))
+            sec = "{}".format(int(delta.total_seconds()%3600%60))
+            log("next run in {}:{}:{} ".format(hours, min, sec))
+
+            # sleep until next run.
+            if delta.total_seconds() > 5:
+                time.sleep(delta.total_seconds() - 5)
+
+            # find the zone associated with this schedule
+            zone_to_run = None
+            for z in self.zones:
+                if z.zoneId == next_run.zoneId:
+                    zone_to_run = z
+                    break
+
+            log("{} found active {}".format(zone_to_run.name, next_run.toStr()))
+            # run the zone
+            runforSeconds = next_run.runSeconds
+            self.startChannel(zone_to_run, runforSeconds)
 
     def startChannel(self, zone, seconds=500):
         reg_value = [0xfe , 0xfd , 0xfb, 0xf7, 0xef, 0xdf, 0xbf, 0x7f]
